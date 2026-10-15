@@ -1,0 +1,47 @@
+name: prueba-deepface
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: deepface_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-deepface}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-deepface}
+      POSTGRES_DB: ${POSTGRES_DB:-deepface}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-deepface} -d ${POSTGRES_DB:-deepface}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deepface_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-deepface}:${POSTGRES_PASSWORD:-deepface}@db:5432/${POSTGRES_DB:-deepface}
+      DEEPFACE_MODEL: ${DEEPFACE_MODEL:-Facenet512}
+      DEEPFACE_DETECTOR: ${DEEPFACE_DETECTOR:-opencv}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/code/app
+      - ./face:/code/face
+      - ../front:/code/front:ro
+      - deepface_weights:/root/.deepface
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  pgdata:
+  deepface_weights:
