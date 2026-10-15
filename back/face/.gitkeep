@@ -1,0 +1,2 @@
+# Carpeta donde se guardan las imagenes de los rostros conocidos.
+# Se monta como volumen (./face:/code/face) para que no se pierdan al reconstruir.

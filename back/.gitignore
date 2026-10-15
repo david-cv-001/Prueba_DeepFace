@@ -1,0 +1,40 @@
+# Entorno
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+
+# Uploads / faces / imágenes temporales
+face/*
+!face/.gitkeep
+uploads/
+static/
+media/
+
+# Modelos grandes DeepFace
+*.pt
+*.onnx
+*.pkl
+*.h5
+*.weights
+
+# Logs
+*.log
+
+# Cache
+.cache/
+*.db
+
+# Otros
+*.zip
+*.tar.gz

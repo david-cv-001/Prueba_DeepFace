@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Reconocimiento Facial</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      padding: 2rem;
+    }
+    h1 { margin: 0; font-size: 1.5rem; font-weight: 600; }
+    .video-wrap {
+      position: relative;
+      width: min(90vw, 480px);
+      aspect-ratio: 4 / 3;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #1e293b;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+    }
+    video { width: 100%; height: 100%; object-fit: cover; }
+    #panel {
+      width: min(90vw, 480px);
+      min-height: 140px;
+      border-radius: 16px;
+      background: #1e293b;
+      padding: 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+    }
+    #panel img {
+      width: 120px;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 3px solid #22c55e;
+    }
+    #panel h2 { margin: 0; font-size: 1.5rem; }
+    .ok { color: #22c55e; }
+    .no { color: #f87171; }
+    .hint { color: #94a3b8; font-size: .95rem; }
+    button {
+      padding: .8rem 1.6rem;
+      border: 0;
+      border-radius: 999px;
+      background: #3b82f6;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .5; cursor: default; }
+  </style>
+</head>
+<body>
+  <h1>Reconocimiento Facial</h1>
+
+  <div class="video-wrap">
+    <video id="video" autoplay playsinline muted></video>
+  </div>
+
+  <div id="panel">
+    <p class="hint">Pulsa “Iniciar cámara” y ponte frente a la cámara.</p>
+  </div>
+
+  <button id="start">Iniciar cámara</button>
+
+  <script>
+    const video = document.getElementById("video");
+    const panel = document.getElementById("panel");
+    const startBtn = document.getElementById("start");
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    const INTERVAL_MS = 2500; // no lanzar otra peticion hasta terminar la anterior
+    let scanning = false;
+    let busy = false;
+    let timer = null;
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        startBtn.disabled = true;
+        startBtn.textContent = "Cámara activa";
+        scanning = true;
+        timer = setInterval(scan, INTERVAL_MS);
+        scan();
+      } catch (err) {
+        panel.innerHTML = '<p class="hint">No se pudo acceder a la cámara: ' + err.message + "</p>";
+      }
+    }
+
+    async function scan() {
+      if (!scanning || busy || video.readyState !== 4 || !video.videoWidth) return;
+      busy = true;
+      try {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const blob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", 0.9)
+        );
+        const form = new FormData();
+        form.append("file", blob, "frame.jpg");
+
+        const res = await fetch("/recognize", { method: "POST", body: form });
+        const data = await res.json();
+        render(data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        busy = false;
+      }
+    }
+
+    function render(data) {
+      if (data.found) {
+        panel.innerHTML =
+          '<img src="' + data.image_url + '" alt="' + data.name + '">' +
+          '<div><h2 class="ok">Bienvenido, ' + data.name + "</h2>" +
+          '<p class="hint">distancia: ' + data.distance.toFixed(3) + "</p></div>";
+      } else {
+        panel.innerHTML = '<h2 class="no">No encontrado</h2>';
+      }
+    }
+
+    startBtn.addEventListener("click", startCamera);
+  </script>
+</body>
+</html>
