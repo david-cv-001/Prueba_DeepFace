@@ -36,6 +36,8 @@ Todos los comandos de Docker se ejecutan **dentro de la carpeta `back/`** (ahí 
 ```bash
 cd back
 docker compose up --build
+o
+docker compose up -d
 ```
 
 Qué pasa la primera vez (puede tardar varios minutos):
@@ -49,7 +51,7 @@ Deja ese terminal abierto (verás los logs). Cuando aparezca algo como `Uvicorn 
 ### Comprobar que está arriba
 
 ```bash
-curl http://localhost:8000/health
+http://localhost:8000/health
 # {"status":"ok"}
 ```
 
