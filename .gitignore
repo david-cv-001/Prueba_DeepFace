@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Variables de entorno / secretos
+.env
+*.env
+!.env.example
+
+# DeepFace / modelos y pesos
+*.pt
+*.pth
+*.onnx
+*.h5
+*.ckpt
+*.pb
+
+# Fotos subidas en tiempo de ejecución
+back/face/*.jpg
+back/face/*.jpeg
+back/face/*.png
+!back/face/.gitkeep
+
+# Base de datos local
+*.sqlite3
+*.db
+
+# Frontend
+node_modules/
+dist/
+.vite/
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
