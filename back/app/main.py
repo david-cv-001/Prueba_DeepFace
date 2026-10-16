@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from deepface import DeepFace
 from deepface.modules import verification
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -108,6 +108,37 @@ def enroll_face(
         "name": face.name,
         "image_url": f"/images/{face.image_filename}",
     }
+
+
+@app.delete("/faces/{face_id}", status_code=204)
+def delete_face(face_id: int, db: Session = Depends(get_db)):
+    """Elimina un rostro conocido: borra la fila y su foto."""
+    face = db.get(KnownFace, face_id)
+    if face is None:
+        raise HTTPException(status_code=404, detail="Rostro no encontrado")
+
+    filename = face.image_filename
+    db.delete(face)
+    db.commit()
+    # Borra la imagen del disco (si ya no existe, no falla).
+    (FACE_DIR / filename).unlink(missing_ok=True)
+    return Response(status_code=204)
+
+
+@app.get("/faces")
+def list_faces(db: Session = Depends(get_db)):
+    """Lista los rostros conocidos (sin el embedding)."""
+    faces = db.execute(select(KnownFace).order_by(KnownFace.id)).scalars().all()
+
+    return [
+        {
+            "id": f.id,
+            "name": f.name,
+            "image_url": f"/images/{f.image_filename}",
+            "created_at": f.created_at,
+        }
+        for f in faces
+    ]
 
 
 @app.post("/recognize")
