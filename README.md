@@ -67,126 +67,62 @@ Abre en el navegador:
 
 ---
 
-## 3. Cargar (enrolar) imágenes
-
-Tienes **dos formas**: con la interfaz de Swagger o con `curl`.
-
-### Opción A — desde Swagger (recomendado para empezar)
-
-1. Entra en http://localhost:8000/docs
-2. Abre **`POST /faces`** → botón **Try it out**.
-3. Rellena:
-   - `name`: el nombre de la persona, p. ej. `David`.
-   - `file`: **Choose File** y selecciona una foto clara de la cara (JPG/PNG).
-4. Pulsa **Execute**.
-
-Respuesta esperada:
-
-```json
-{
-  "id": 1,
-  "name": "David",
-  "image_url": "/images/3f9c...a1.jpg"
-}
-```
-
-Si la foto no tiene una cara detectada, recibirás un error `422`:
-
-```json
-{ "detail": "No se detecto un rostro en la imagen" }
-```
-
-### Opción B — desde la terminal con `curl`
-
-```bash
-curl -X POST http://localhost:8000/faces \
-  -F "name=David" \
-  -F "file=@/ruta/a/tu/foto.jpg"
-```
-
-Repite el proceso para cada persona. Puedes listar las imágenes registradas porque se guardan en `back/face/`.
-
----
-
-## 4. Reconocer con la cámara
-
-1. Abre http://localhost:8000/
-2. Pulsa **Iniciar cámara** y acepta el permiso del navegador.
-3. Ponte frente a la cámara. Cada ~2,5 s el front envía un frame a `POST /recognize`.
-
-Resultado:
-
-- **Coincidencia** → muestra la foto guardada, `Bienvenido, <nombre>` y la distancia.
-- **Sin coincidencia** → `No encontrado`.
-
-> La primera detección puede tardar porque el modelo se carga en memoria. Las siguientes son rápidas.
-
-### Probar el endpoint directo (sin cámara)
-
-```bash
-curl -X POST http://localhost:8000/recognize -F "file=@/ruta/a/tu/foto.jpg"
-```
-
-- Encontrado: `{"found":true,"name":"David","image_url":"...","distance":0.21,"threshold":0.3}`
-- No encontrado: `{"found":false}`
-
----
-
-## 5. Configuración (opcional)
-
-El `compose.yaml` funciona con valores por defecto. Si quieres cambiarlos, crea un archivo `.env` dentro de `back/` (está ignorado por git):
-
-```dotenv
-POSTGRES_USER=deepface
-POSTGRES_PASSWORD=deepface
-POSTGRES_DB=deepface
-DEEPFACE_MODEL=Facenet512
-DEEPFACE_DETECTOR=opencv
-```
-
-| Variable | Descripción | Por defecto |
-|---|---|---|
-| `POSTGRES_USER` | Usuario de Postgres | `deepface` |
-| `POSTGRES_PASSWORD` | Contraseña de Postgres | `deepface` |
-| `POSTGRES_DB` | Nombre de la base de datos | `deepface` |
-| `DEEPFACE_MODEL` | Modelo de embeddings | `Facenet512` |
-| `DEEPFACE_DETECTOR` | Detector de rostro (`opencv`, `retinaface`, …) | `opencv` |
-
-> Si cambias `DEEPFACE_MODEL`, la tabla `known_face` está fijada a `vector(512)`. Usa otro modelo solo si su embedding también es de 512 dims (o actualiza `02-tables.sql` y `models.py`).
-
----
-
-## 6. Comandos útiles
-
-| Acción | Comando (desde `back/`) |
-|---|---|
-| Arrancar en segundo plano | `docker compose up -d --build` |
-| Ver logs | `docker compose logs -f` |
-| Ver logs solo del API | `docker compose logs -f api` |
-| Parar (conserva datos) | `docker compose down` |
-| Parar y **borrar datos** (DB + pesos) | `docker compose down -v` |
-| Reconstruir el API | `docker compose up -d --build api` |
-| Entrar a la shell del API | `docker compose exec api bash` |
-
----
-
-## 7. Endpoints de la API
+## 3. Endpoints de la API
 
 | Método | Ruta | Descripción |
 |---|---|---|
 | `GET` | `/health` | Comprueba API + conexión a la base de datos. |
-| `POST` | `/faces` | Registra un rostro (`name` + `file`). |
-| `POST` | `/recognize` | Identifica el rostro de un frame (`file`). |
+| `GET` | `/faces` | Lista los rostros registrados (sin el embedding). |
+| `POST` | `/faces` | Registra un rostro (`name` + `file`): guarda la foto y su embedding. |
+| `DELETE` | `/faces/{face_id}` | Elimina un rostro por su `id` (borra la fila y su foto). Devuelve `204`. |
+| `POST` | `/recognize` | Identifica el rostro de un frame (`file`) buscando la coincidencia más cercana. |
 | `GET` | `/images/{archivo}` | Sirve las fotos registradas. |
 | `GET` | `/` | Sirve el front (webcam). |
 | `GET` | `/docs` | Swagger UI. |
 
 ---
 
-## 8. Notas y problemas comunes
+## 4. ¿Cómo funciona DeepFace?
 
-- **La primera vez tarda**: construir la imagen (TensorFlow) y descargar el modelo puede llevar varios minutos. Los pesos quedan cacheados en el volumen `deepface_weights`.
-- **La cámara no funciona**: usa `http://localhost:8000/` (no la IP de la máquina). Los navegadores solo permiten la webcam en `localhost` o HTTPS.
-- **Puerto 5432 ocupado**: si ya tienes otro Postgres local, cambia el mapeo en `compose.yaml` (p. ej. `"5433:5432"`).
-- **Cambié los archivos SQL y no se aplican**: los scripts de `db/init/` solo se ejecutan al crear el volumen. Haz `docker compose down -v` y vuelve a levantar.
-- **Reseteo total** (borra rostros, base de datos y modelo descargado): `docker compose down -v` y luego `docker compose up --build`.
+DeepFace se encarga de **convertir una cara en un vector de números** (el *embedding*). Con ese vector comparamos dos rostros midiendo la distancia entre ellos. Nada más: DeepFace es una librería de cálculo, **no guarda tus datos ni tu base de datos**.
+
+### 4.1. Qué hace con cada imagen
+
+1. **Detección**: encuentra la cara dentro de la foto usando un *detector*. Aquí usamos `opencv` (backend `DEEPFACE_DETECTOR=opencv`).
+2. **Alineación y normalización**: recorta/endereza la cara y ajusta tamaño y colores.
+3. **Embedding**: pasa la cara por la red neuronal del modelo elegido. Con `Facenet512` (`DEEPFACE_MODEL=Facenet512`) devuelve un vector de **512 números** (floats).
+4. **Comparación**: para saber si dos caras son la misma persona se calcula la **distancia coseno** entre sus vectores. Cuanto más pequeña, más parecidas. Se compara con un **umbral** (nosotros lo sacamos de `deepface.modules.verification.find_threshold`).
+
+### 4.2. Dónde y cómo se guardan los *pesos* del modelo
+
+- El modelo son unos **pesos preentrenados** (no se entrena nada aquí). Se guardan en un archivo **`.h5`** (formato HDF5, es decir, binario con la red ya entrenada), no en la base de datos.
+- Ruta por defecto dentro de la librería: `~/.deepface/weights/`. En el contenedor (usuario `root`) es `/root/.deepface/weights/facenet512_weights.h5` (~**95 MB**).
+- En este proyecto ese directorio está montado en el **volumen Docker `deepface_weights`**, así que **sobrevive** a reinicios y a reconstruir la imagen.
+
+### 4.3. ¿Necesita internet? ¿Local o red?
+
+- **La primera vez**: sí. Si el archivo `.h5` no existe, DeepFace lo **descarga** desde GitHub (`github.com/serengil/deepface_models`, release `v1.0`). Con `Facenet512` son ~95 MB.
+- **Después**: **no**. El archivo queda en el volumen y se lee **desde el disco local**. A partir de ahí todo funciona **sin conexión**.
+- El **detector `opencv`** no descarga nada: usa un clasificador Haar que viene incluido con OpenCV.
+- Internet también hizo falta al construir la imagen (para `pip install`).
+- Si borras el volumen (`docker compose down -v`), **vuelve a descargar** el modelo.
+
+### 4.4. ¿Se carga una vez y queda en memoria?
+
+- Sí. Al arrancar, el API hace `DeepFace.build_model("Facenet512")` (el *warmup* en `lifespan`) y **carga los pesos en RAM una sola vez**.
+- Todas las peticiones (`/faces`, `/recognize`) reutilizan ese modelo ya cargado: **no se vuelve a descargar ni a leer del disco** en cada llamada.
+- Por eso la primera petición tras arrancar ya es rápida; el único coste es el arranque.
+
+### 4.5. Entonces… ¿quién guarda la información?
+
+Dos sitios, y **ninguno es DeepFace**:
+
+| Qué | Dónde | Cómo |
+|---|---|---|
+| El **modelo** (pesos) | Volumen Docker `deepface_weights` (`/root/.deepface/weights/`) | Archivo `.h5` (HDF5), ~95 MB. |
+| Los **rostros conocidos** | PostgreSQL (`known_face`) | `name`, `image_filename` y el **embedding** en una columna `vector(512)` (pgvector). |
+| Las **fotos** | Carpeta `back/face/` | Imágenes `.jpg`/`.png` servidas en `/images/...`. |
+
+Resumen: **DeepFace solo calcula** el vector; **tu base de datos** guarda el nombre y el vector; **la carpeta `face/`** guarda la foto. En `/recognize` se calcula el vector del frame y se buscan con pgvector las filas más cercanas por distancia coseno.
+
+---
